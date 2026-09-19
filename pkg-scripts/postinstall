@@ -1,0 +1,31 @@
+#!/bin/zsh
+set -u
+
+queue=Brother_QL_1060N
+ppd='/Library/Printers/PPDs/Contents/Resources/Brother QL-1060N macOS27.ppd'
+private_log='/private/var/spool/cups/tmp/ql1060n-driver.log'
+readable_log_dir='/Library/Logs/QL1060N'
+readable_log="$readable_log_dir/driver.log"
+
+# CUPS permite escribir al filtro en su directorio privado. Un enlace físico
+# ofrece el mismo registro en una ruta legible por el usuario sin relajar los
+# permisos del directorio de spool ni duplicar datos.
+/bin/mkdir -p "$readable_log_dir"
+/usr/bin/touch "$private_log"
+/usr/sbin/chown _lp:staff "$private_log"
+/bin/chmod 0644 "$private_log"
+/bin/ln -f "$private_log" "$readable_log"
+
+if /usr/bin/lpstat -p "$queue" >/dev/null 2>&1; then
+  /usr/sbin/lpadmin -p "$queue" -E -P "$ppd" -o PageSize=DC16
+  result_code=$?
+  if (( result_code != 0 )); then
+    echo "No se pudo actualizar la cola $queue (lpadmin: $result_code)" >&2
+    exit "$result_code"
+  fi
+  echo "Cola $queue actualizada al filtro arm64."
+else
+  echo "No existe la cola $queue; se instaló el software sin crear una cola."
+fi
+
+exit 0
