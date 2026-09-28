@@ -3,13 +3,13 @@
 *FileVersion: "0.6.0"
 *LanguageVersion: English
 *LanguageEncoding: ISOLatin1
-*PCFileName: "QL1060N.PPD"
+*PCFileName: "QL1050.PPD"
 *Manufacturer: "Brother"
-*Product: "(QL-1060N)"
-*ModelName: "Brother QL-1060N"
-*ShortNickName: "QL-1060N (macOS 27 arm64)"
-*NickName: "Brother QL-1060N - macOS 27 arm64"
-*1284DeviceID: "MFG:Brother;MDL:QL-1060N;"
+*Product: "(QL-1050)"
+*ModelName: "Brother QL-1050"
+*ShortNickName: "QL-1050 (macOS 27 arm64)"
+*NickName: "Brother QL-1050 - macOS 27 arm64"
+*1284DeviceID: "MFG:Brother;MDL:QL-1050;"
 *cupsVersion: 2.3
 *cupsManualCopies: False
 *cupsFilter: "application/vnd.cups-raster 0 /Library/Printers/QL1060N-macOS27/Filter/rastertoql1060n"
@@ -134,11 +134,6 @@
 *BrMirror True/On: ""
 *BrMirror False/Off: ""
 *CloseUI: *BrMirror
-*OpenUI *BrMediaDetect/Media Detection: PickOne
-*DefaultBrMediaDetect: Auto
-*BrMediaDetect Auto/Automatic 102 mm roll: ""
-*BrMediaDetect Selected/Use selected media exactly: ""
-*CloseUI: *BrMediaDetect
 *OpenUI *BrPriority/Quality: PickOne
 *DefaultBrPriority: BrSpeed
 *BrPriority BrSpeed/Speed: ""

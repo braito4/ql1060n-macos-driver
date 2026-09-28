@@ -21,7 +21,7 @@
 
 #define HEAD_PINS 1296
 #define HEAD_BYTES (HEAD_PINS / 8)
-#define DRIVER_VERSION "0.5.2"
+#define DRIVER_VERSION "0.6.0"
 
 typedef struct {
   const char *name;
@@ -144,6 +144,10 @@ static int parse_device_host(const char *uri, char *host, size_t capacity) {
   memcpy(host, start, length);
   host[length] = '\0';
   return 0;
+}
+
+static int device_uri_is_usb(const char *uri) {
+  return uri && !strncasecmp(uri, "usb:", 4);
 }
 
 static int parse_status_block(const uint8_t *data, size_t length,
@@ -546,7 +550,7 @@ int main(int argc, char **argv) {
   int automatic_media =
       strcasecmp(option_value(argv[5], "BrMediaDetect", "Auto"), "Selected") != 0;
   const char *device_uri = getenv("DEVICE_URI");
-  if (automatic_media && device_uri &&
+  if (automatic_media && device_uri && !device_uri_is_usb(device_uri) &&
       !query_network_status(device_uri, &detected_status)) {
     trace_log("MEDIA-DETECT type=0x%02x width=%u length=%u error1=0x%02x "
               "error2=0x%02x status=0x%02x phase=0x%02x",
@@ -554,6 +558,8 @@ int main(int argc, char **argv) {
               detected_status.length_mm, detected_status.error1,
               detected_status.error2, detected_status.status_type,
               detected_status.phase_type);
+  } else if (automatic_media && device_uri && device_uri_is_usb(device_uri)) {
+    trace_log("MEDIA-DETECT skipped for USB device");
   } else if (automatic_media) {
     trace_log("MEDIA-DETECT unavailable; using selected PageSize");
   }

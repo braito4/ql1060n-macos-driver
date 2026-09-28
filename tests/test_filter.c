@@ -33,6 +33,10 @@ int main(void) {
   assert(find_media("C_DC03_01")->width_mm == 29);
   assert(find_media("DC16")->length_mm == 153);
   assert(find_media("no-existe") == NULL);
+  assert(device_uri_is_usb("usb://Brother/QL-1050"));
+  assert(device_uri_is_usb("USB://Brother/QL-1060N"));
+  assert(!device_uri_is_usb("socket://192.0.2.10:9100"));
+  assert(!device_uri_is_usb(NULL));
   uint8_t command[3];
   make_raster_command(8, command);
   assert(command[0] == 0x67 && command[1] == 0x00 && command[2] == 0x08);
