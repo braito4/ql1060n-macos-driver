@@ -21,7 +21,9 @@
 
 #define HEAD_PINS 1296
 #define HEAD_BYTES (HEAD_PINS / 8)
-#define DRIVER_VERSION "0.6.0"
+#define CONTINUOUS_MIN_ROWS 295
+#define CONTINUOUS_MAX_ROWS 35433
+#define DRIVER_VERSION "0.7.0"
 
 typedef struct {
   const char *name;
@@ -51,17 +53,31 @@ static const media_t media_table[] = {
     {"DC07", 62, 100, 544, 696, 0}, {"DC15", 102, 51, 76, 1164, 0},
     /* Brother reports the nominal 102 x 152 mm DK roll as length 153. */
     {"DC16", 102, 153, 76, 1164, 0},
+    {"DC103_164", 104, 164, 40, 1200, 0},
     {"DC12", 12, 12, 1046, 94, 0}, {"DC13", 24, 24, 975, 236, 0},
     {"DC05", 58, 58, 584, 618, 0},
     {"W12", 12, 0, 1116, 106, 1},  {"W29", 29, 0, 940, 306, 1},
     {"W38", 38, 0, 827, 413, 1},   {"W50", 50, 0, 686, 554, 1},
     {"W54", 54, 0, 662, 590, 1},   {"W62", 62, 0, 544, 696, 1},
     {"W102", 102, 0, 76, 1164, 1},
+    {"W103", 104, 0, 40, 1200, 1},
 };
+
+/*
+ * Model and media compatibility data was cross-checked against the public
+ * pklaus/brother_ql project (GPL-3.0). This is an independent implementation
+ * of Brother's published raster command reference; no brother_ql source code
+ * is incorporated here.
+ */
 
 static volatile sig_atomic_t cancelled = 0;
 static int trace_fd = -1;
 static char trace_path[PATH_MAX];
+
+static int parse_status_block(const uint8_t *data, size_t length,
+                              printer_status_t *status);
+static int status_error_summary(const printer_status_t *status, char *buffer,
+                                size_t capacity);
 
 static int trace_try_open(const char *path) {
   int fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW,
@@ -118,11 +134,16 @@ static void trace_status(const char *label, double timeout) {
     offset += (size_t)snprintf(hex + offset, sizeof(hex) - offset, "%02x%s",
                               status[i], i + 1 == n ? "" : " ");
   trace_log("STATUS %s: n=%zd bytes=%s", label, n, hex);
-  if (n >= 20 && status[0] == 0x80 && status[1] == 0x20) {
+  printer_status_t parsed;
+  if (!parse_status_block(status, (size_t)n, &parsed)) {
+    char errors[256];
+    int has_errors = status_error_summary(&parsed, errors, sizeof(errors));
     trace_log("STATUS decoded: error1=0x%02x error2=0x%02x media=%u mm "
-              "type=0x%02x length=%u status=0x%02x phase=0x%02x",
-              status[8], status[9], status[10], status[11], status[17],
-              status[18], status[19]);
+              "type=0x%02x length=%u status=0x%02x phase=0x%02x errors=%s",
+              parsed.error1, parsed.error2, parsed.width_mm, parsed.type,
+              parsed.length_mm, parsed.status_type, parsed.phase_type, errors);
+    if (has_errors)
+      fprintf(stderr, "WARNING: Estado Brother: %s.\n", errors);
   }
 }
 
@@ -169,6 +190,57 @@ static int parse_status_block(const uint8_t *data, size_t length,
     return 0;
   }
   return -1;
+}
+
+typedef struct {
+  uint8_t mask;
+  const char *description;
+} status_error_t;
+
+static void append_status_error(char *buffer, size_t capacity,
+                                const char *description) {
+  size_t used = strlen(buffer);
+  if (used >= capacity - 1)
+    return;
+  (void)snprintf(buffer + used, capacity - used, "%s%s", used ? "; " : "",
+                 description);
+}
+
+static int status_error_summary(const printer_status_t *status, char *buffer,
+                                size_t capacity) {
+  static const status_error_t error1[] = {
+      {0x01, "sin material"},
+      {0x02, "fin de etiqueta precortada"},
+      {0x04, "atasco del cortador"},
+      {0x10, "unidad principal en uso"},
+      {0x80, "fallo del ventilador"},
+  };
+  static const status_error_t error2[] = {
+      {0x01, "material incorrecto"},
+      {0x02, "búfer de expansión lleno"},
+      {0x04, "error de transmisión"},
+      {0x08, "búfer de comunicación lleno"},
+      {0x10, "tapa abierta"},
+      {0x20, "trabajo cancelado"},
+      {0x40, "no se puede alimentar el material"},
+      {0x80, "error del sistema"},
+  };
+  if (!buffer || !capacity)
+    return 0;
+  buffer[0] = '\0';
+  if (!status || !status->valid) {
+    (void)snprintf(buffer, capacity, "estado no válido");
+    return 0;
+  }
+  for (size_t i = 0; i < sizeof(error1) / sizeof(error1[0]); i++)
+    if (status->error1 & error1[i].mask)
+      append_status_error(buffer, capacity, error1[i].description);
+  for (size_t i = 0; i < sizeof(error2) / sizeof(error2[0]); i++)
+    if (status->error2 & error2[i].mask)
+      append_status_error(buffer, capacity, error2[i].description);
+  if (!buffer[0])
+    (void)snprintf(buffer, capacity, "ninguno");
+  return status->error1 || status->error2;
 }
 
 /* Read Brother's 32-byte printer status block through its private SNMP OID. */
@@ -222,20 +294,28 @@ static const media_t *resolve_media(const media_t *selected,
   if (!selected || !resolved)
     return selected;
   *resolved = *selected;
-  if (!automatic || !status || !status->valid || selected->width_mm != 102 ||
-      (strcmp(selected->name, "DC16") && strcmp(selected->name, "W102")))
+  int family_102 = selected->width_mm == 102 &&
+                   (!strcmp(selected->name, "DC16") ||
+                    !strcmp(selected->name, "W102"));
+  int family_103 = selected->width_mm == 104 &&
+                   (!strcmp(selected->name, "DC103_164") ||
+                    !strcmp(selected->name, "W103"));
+  if (!automatic || !status || !status->valid ||
+      (!family_102 && !family_103))
+    return resolved;
+  if ((family_102 && status->width_mm && status->width_mm != 102) ||
+      (family_103 && status->width_mm != 104))
     return resolved;
 
-  if (status->type == 0x0a &&
-      (!status->width_mm || status->width_mm == selected->width_mm)) {
-    resolved->name = "AUTO-W102";
+  if (status->type == 0x0a) {
+    resolved->name = family_102 ? "AUTO-W102" : "AUTO-W103";
     resolved->continuous = 1;
     resolved->length_mm = 0;
   } else if (status->type == 0x0b &&
-             (!status->width_mm || status->width_mm == selected->width_mm)) {
-    resolved->name = "AUTO-DC16";
+             (!family_103 || !status->length_mm || status->length_mm == 164)) {
+    resolved->name = family_102 ? "AUTO-DC16" : "AUTO-DC103_164";
     resolved->continuous = 0;
-    resolved->length_mm = 153;
+    resolved->length_mm = family_102 ? 153 : 164;
   }
   return resolved;
 }
@@ -294,7 +374,7 @@ static const media_t *find_media(const char *page_size) {
   static const struct { const char *old_name; const char *new_name; } aliases[] = {
       {"12mm", "W12"}, {"29mm", "W29"}, {"38mm", "W38"},
       {"50mm", "W50"}, {"54mm", "W54"}, {"62mm", "W62"},
-      {"102mm", "W102"}, {"103mm", "W102"},
+      {"102mm", "W102"}, {"103mm", "W103"},
   };
   for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
     if (!strcmp(page_size, aliases[i].old_name))
@@ -342,11 +422,14 @@ static size_t packbits(const uint8_t *src, size_t length, uint8_t *dst,
   return o;
 }
 
-static void make_raster_command(size_t packed_length, uint8_t command[3]) {
-  /* QL-series command 'g' stores the compressed length high byte first. */
+static int make_raster_command(size_t packed_length, uint8_t command[3]) {
+  /* Brother defines this as: 'g', a zero byte, then one length byte. */
+  if (packed_length > UINT8_MAX)
+    return -1;
   command[0] = 0x67;
-  command[1] = (uint8_t)((packed_length >> 8) & 0xff);
+  command[1] = 0x00;
   command[2] = (uint8_t)(packed_length & 0xff);
+  return 0;
 }
 
 static int pixel_blackness(const uint8_t *row, unsigned x,
@@ -369,9 +452,26 @@ static int pixel_blackness(const uint8_t *row, unsigned x,
   return 0;
 }
 
+static int halftone_is_black(int black, unsigned x, unsigned y,
+                             int ordered_dither) {
+  static const uint8_t bayer[4][4] = {
+      {0, 8, 2, 10},
+      {12, 4, 14, 6},
+      {3, 11, 1, 9},
+      {15, 7, 13, 5},
+  };
+  if (black < 0)
+    black = 0;
+  if (black > 255)
+    black = 255;
+  int threshold = ordered_dither ? bayer[y & 3][x & 3] * 16 + 8 : 128;
+  return black >= threshold;
+}
+
 static void make_head_row(const uint8_t *src, const cups_page_header2_t *h,
-                          const media_t *media, int mirror, int brightness,
-                          int contrast, uint8_t out[HEAD_BYTES]) {
+                          const media_t *media, unsigned y, int mirror,
+                          int brightness, int contrast, int ordered_dither,
+                          uint8_t out[HEAD_BYTES]) {
   memset(out, 0, HEAD_BYTES);
   unsigned width = h->cupsWidth < media->printable ? h->cupsWidth : media->printable;
   unsigned pad = (media->printable - width) / 2;
@@ -379,7 +479,7 @@ static void make_head_row(const uint8_t *src, const cups_page_header2_t *h,
     int black = pixel_blackness(src, x, h);
     black += brightness * 5;
     black = 128 + ((black - 128) * (100 + contrast * 4)) / 100;
-    if (black < 128)
+    if (!halftone_is_black(black, x, y, ordered_dither))
       continue;
     /* QL raster rows are transmitted from the right side of the head. */
     unsigned active_x = mirror ? x + pad : media->printable - 1 - (x + pad);
@@ -387,6 +487,11 @@ static void make_head_row(const uint8_t *src, const cups_page_header2_t *h,
     if (pin < HEAD_PINS)
       out[pin / 8] |= (uint8_t)(0x80u >> (pin % 8));
   }
+}
+
+static int valid_page_length(const media_t *media, uint32_t rows) {
+  return !media || !media->continuous ||
+         (rows >= CONTINUOUS_MIN_ROWS && rows <= CONTINUOUS_MAX_ROWS);
 }
 
 static int emit_control(FILE *out, const media_t *media, uint32_t rows,
@@ -452,6 +557,8 @@ static int encode_page(cups_raster_t *ras, const cups_page_header2_t *h,
   int cut_every = atoi(option_value(options, "BrCutLabel", "1"));
   int cut_at_end = option_is_on(option_value(options, "BrCutAtEnd", "ON"));
   int mirror = option_is_on(option_value(options, "BrMirror", "OFF"));
+  int ordered_dither =
+      !strcasecmp(option_value(options, "BrHalftone", "Threshold"), "Ordered");
   int quality = strcmp(option_value(options, "BrPriority", "BrSpeed"), "BrQuality") == 0;
   int brightness = atoi(option_value(options, "BrBrightness", "0"));
   int contrast = atoi(option_value(options, "BrContrast", "0"));
@@ -472,11 +579,13 @@ static int encode_page(cups_raster_t *ras, const cups_page_header2_t *h,
   unsigned blank_rows = 0, packed_rows = 0;
   size_t packed_bytes = 0, packed_min = SIZE_MAX, packed_max = 0;
   trace_log("PAGE %d: media=%s type=%s protocol=%ux%u raster=%ux%u "
-            "bpc=%u bpp=%u bytes_line=%u cut=%d mirror=%d margin_dots=%d",
+            "bpc=%u bpp=%u bytes_line=%u cut=%d mirror=%d halftone=%s "
+            "margin_dots=%d",
             page_no, media->name, media->continuous ? "continuous" : "die-cut",
             media->width_mm, media->length_mm, h->cupsWidth, h->cupsHeight,
             h->cupsBitsPerColor, h->cupsBitsPerPixel, h->cupsBytesPerLine,
-            auto_cut, mirror, margin_dots);
+            auto_cut, mirror, ordered_dither ? "ordered" : "threshold",
+            margin_dots);
 
   for (unsigned y = 0; y < h->cupsHeight && !cancelled; y++) {
     if (cupsRasterReadPixels(ras, input, h->cupsBytesPerLine) != h->cupsBytesPerLine) {
@@ -485,7 +594,8 @@ static int encode_page(cups_raster_t *ras, const cups_page_header2_t *h,
       return -1;
     }
     uint8_t head[HEAD_BYTES], packed[HEAD_BYTES + 4];
-    make_head_row(input, h, media, mirror, brightness, contrast, head);
+    make_head_row(input, h, media, y, mirror, brightness, contrast,
+                  ordered_dither, head);
     int blank = 1;
     for (size_t i = 0; i < sizeof(head); i++)
       if (head[i]) { blank = 0; break; }
@@ -495,13 +605,15 @@ static int encode_page(cups_raster_t *ras, const cups_page_header2_t *h,
       if (write_bytes(encoded, &zero, 1)) { free(input); return -1; }
     } else {
       size_t n = packbits(head, sizeof(head), packed, sizeof(packed));
-      if (!n || n > 65535) { free(input); return -1; }
+      uint8_t command[3];
+      if (!n || make_raster_command(n, command)) {
+        free(input);
+        return -1;
+      }
       packed_rows++;
       packed_bytes += n;
       if (n < packed_min) packed_min = n;
       if (n > packed_max) packed_max = n;
-      uint8_t command[3];
-      make_raster_command(n, command);
       if (write_bytes(encoded, command, sizeof(command)) ||
           write_bytes(encoded, packed, n)) { free(input); return -1; }
     }
@@ -526,10 +638,12 @@ int main(int argc, char **argv) {
       fprintf(stderr, "ERROR: No se pudo leer el estado SNMP de %s.\n", argv[2]);
       return 1;
     }
+    char errors[256];
+    (void)status_error_summary(&status, errors, sizeof(errors));
     printf("media_type=0x%02x width=%u length=%u error1=0x%02x "
-           "error2=0x%02x status=0x%02x phase=0x%02x\n",
+           "error2=0x%02x status=0x%02x phase=0x%02x errors=%s\n",
            status.type, status.width_mm, status.length_mm, status.error1,
-           status.error2, status.status_type, status.phase_type);
+           status.error2, status.status_type, status.phase_type, errors);
     return 0;
   }
   if (argc < 6 || argc > 7) {
@@ -558,6 +672,11 @@ int main(int argc, char **argv) {
               detected_status.length_mm, detected_status.error1,
               detected_status.error2, detected_status.status_type,
               detected_status.phase_type);
+    char errors[256];
+    if (status_error_summary(&detected_status, errors, sizeof(errors))) {
+      trace_log("MEDIA-DETECT errors=%s", errors);
+      fprintf(stderr, "WARNING: Estado Brother: %s.\n", errors);
+    }
   } else if (automatic_media && device_uri && device_uri_is_usb(device_uri)) {
     trace_log("MEDIA-DETECT skipped for USB device");
   } else if (automatic_media) {
@@ -615,6 +734,14 @@ int main(int argc, char **argv) {
       fprintf(stderr, "ERROR: Raster demasiado ancho (%u > %u puntos).\n",
               h.cupsWidth, media->printable);
       result = 1; break;
+    }
+    if (!valid_page_length(media, h.cupsHeight)) {
+      fprintf(stderr,
+              "ERROR: Longitud continua no compatible: %u filas; el modelo "
+              "admite de %u a %u filas (aprox. 25 a 3000 mm).\n",
+              h.cupsHeight, CONTINUOUS_MIN_ROWS, CONTINUOUS_MAX_ROWS);
+      result = 1;
+      break;
     }
     fprintf(stderr, "INFO: Página %d, %s, %ux%u píxeles.\n",
             page_no, page_size, h.cupsWidth, h.cupsHeight);

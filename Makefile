@@ -5,7 +5,7 @@ LDLIBS := -lcups
 export COPYFILE_DISABLE := 1
 BUILD := build
 FILTER := $(BUILD)/rastertoql1060n
-VERSION := 0.6.0
+VERSION := 0.7.0
 PPDS := ppd/Brother-QL-1060N-macOS27.ppd ppd/Brother-QL-1050-macOS27.ppd
 
 .PHONY: all test clean package installer
@@ -29,6 +29,9 @@ test: $(FILTER) $(BUILD)/test_filter
 	cupstestppd -q -I filters $(PPDS)
 	grep -q 'BrMediaDetect' ppd/Brother-QL-1060N-macOS27.ppd
 	! grep -q 'BrMediaDetect' ppd/Brother-QL-1050-macOS27.ppd
+	grep -q 'PageSize W103' ppd/Brother-QL-1060N-macOS27.ppd
+	grep -q 'PageSize DC103_164' ppd/Brother-QL-1050-macOS27.ppd
+	grep -q 'BrHalftone Ordered' ppd/Brother-QL-1060N-macOS27.ppd
 
 package: test
 	mkdir -p $(BUILD)/package/Filter $(BUILD)/package/PPDs

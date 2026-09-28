@@ -1,6 +1,6 @@
 *PPD-Adobe: "4.3"
 *FormatVersion: "4.3"
-*FileVersion: "0.6.0"
+*FileVersion: "0.7.0"
 *LanguageVersion: English
 *LanguageEncoding: ISOLatin1
 *PCFileName: "QL1060N.PPD"
@@ -40,6 +40,7 @@
 *PageSize DC07/62 x 100 mm: "<</PageSize[175.68 282.96]/ImagingBBox null>>setpagedevice"
 *PageSize DC15/102 x 51 mm: "<</PageSize[288.00 143.04]/ImagingBBox null>>setpagedevice"
 *PageSize DC16/102 x 152 mm: "<</PageSize[288.00 432.96]/ImagingBBox null>>setpagedevice"
+*PageSize DC103_164/103 x 164 mm: "<</PageSize[293.67 465.73]/ImagingBBox null>>setpagedevice"
 *PageSize DC12/12 mm round: "<</PageSize[34.08 34.08]/ImagingBBox null>>setpagedevice"
 *PageSize DC13/24 mm round: "<</PageSize[68.16 68.16]/ImagingBBox null>>setpagedevice"
 *PageSize DC05/58 mm round: "<</PageSize[165.12 165.12]/ImagingBBox null>>setpagedevice"
@@ -50,6 +51,7 @@
 *PageSize W54/54 mm continuous: "<</PageSize[153.12 283.44]/ImagingBBox null>>setpagedevice"
 *PageSize W62/62 mm continuous: "<</PageSize[175.68 283.44]/ImagingBBox null>>setpagedevice"
 *PageSize W102/102 x 152 mm continuous: "<</PageSize[288.00 432.96]/ImagingBBox null>>setpagedevice"
+*PageSize W103/103 x 152 mm continuous: "<</PageSize[293.67 432.96]/ImagingBBox null>>setpagedevice"
 *CloseUI: *PageSize
 
 *OpenUI *PageRegion/Media Size: PickOne
@@ -66,6 +68,7 @@
 *PageRegion DC07/62 x 100 mm: "<</PageSize[175.68 282.96]/ImagingBBox null>>setpagedevice"
 *PageRegion DC15/102 x 51 mm: "<</PageSize[288.00 143.04]/ImagingBBox null>>setpagedevice"
 *PageRegion DC16/102 x 152 mm: "<</PageSize[288.00 432.96]/ImagingBBox null>>setpagedevice"
+*PageRegion DC103_164/103 x 164 mm: "<</PageSize[293.67 465.73]/ImagingBBox null>>setpagedevice"
 *PageRegion DC12/12 mm round: "<</PageSize[34.08 34.08]/ImagingBBox null>>setpagedevice"
 *PageRegion DC13/24 mm round: "<</PageSize[68.16 68.16]/ImagingBBox null>>setpagedevice"
 *PageRegion DC05/58 mm round: "<</PageSize[165.12 165.12]/ImagingBBox null>>setpagedevice"
@@ -76,6 +79,7 @@
 *PageRegion W54/54 mm continuous: "<</PageSize[153.12 283.44]/ImagingBBox null>>setpagedevice"
 *PageRegion W62/62 mm continuous: "<</PageSize[175.68 283.44]/ImagingBBox null>>setpagedevice"
 *PageRegion W102/102 x 152 mm continuous: "<</PageSize[288.00 432.96]/ImagingBBox null>>setpagedevice"
+*PageRegion W103/103 x 152 mm continuous: "<</PageSize[293.67 432.96]/ImagingBBox null>>setpagedevice"
 *CloseUI: *PageRegion
 
 *DefaultImageableArea: DC16
@@ -90,6 +94,7 @@
 *ImageableArea DC07: "4.32 8.40 171.36 274.56"
 *ImageableArea DC15: "4.32 8.40 283.68 134.64"
 *ImageableArea DC16: "4.32 17.28 283.68 415.68"
+*ImageableArea DC103_164: "2.88 14.16 290.88 451.44"
 *ImageableArea DC12: "5.76 5.76 28.32 28.32"
 *ImageableArea DC13: "5.76 5.76 62.40 62.40"
 *ImageableArea DC05: "8.40 8.40 156.72 156.72"
@@ -100,6 +105,7 @@
 *ImageableArea W54: "5.76 8.40 147.36 275.04"
 *ImageableArea W62: "4.32 8.40 171.36 275.04"
 *ImageableArea W102: "4.32 8.40 283.68 424.56"
+*ImageableArea W103: "2.88 8.40 290.88 424.56"
 
 *DefaultPaperDimension: DC16
 *PaperDimension DC01: "48.24 152.64"
@@ -113,6 +119,7 @@
 *PaperDimension DC07: "175.68 282.96"
 *PaperDimension DC15: "288.00 143.04"
 *PaperDimension DC16: "288.00 432.96"
+*PaperDimension DC103_164: "293.67 465.73"
 *PaperDimension DC12: "34.08 34.08"
 *PaperDimension DC13: "68.16 68.16"
 *PaperDimension DC05: "165.12 165.12"
@@ -123,6 +130,7 @@
 *PaperDimension W54: "153.12 283.44"
 *PaperDimension W62: "175.68 283.44"
 *PaperDimension W102: "288.00 432.96"
+*PaperDimension W103: "293.67 432.96"
 
 *OpenUI *BrAutoTapeCut/Auto Cut: Boolean
 *DefaultBrAutoTapeCut: True
@@ -134,9 +142,14 @@
 *BrMirror True/On: ""
 *BrMirror False/Off: ""
 *CloseUI: *BrMirror
+*OpenUI *BrHalftone/Grayscale Rendering: PickOne
+*DefaultBrHalftone: Threshold
+*BrHalftone Threshold/Text and barcodes: ""
+*BrHalftone Ordered/Photos and graphics: ""
+*CloseUI: *BrHalftone
 *OpenUI *BrMediaDetect/Media Detection: PickOne
 *DefaultBrMediaDetect: Auto
-*BrMediaDetect Auto/Automatic 102 mm roll: ""
+*BrMediaDetect Auto/Automatic wide roll (102/103 mm): ""
 *BrMediaDetect Selected/Use selected media exactly: ""
 *CloseUI: *BrMediaDetect
 *OpenUI *BrPriority/Quality: PickOne

@@ -29,7 +29,10 @@ int main(void) {
   assert(!memcmp(source, restored, sizeof(source)));
   assert(find_media("DC15")->printable == 1164);
   assert(find_media("W102")->continuous == 1);
+  assert(find_media("W103")->printable == 1200);
+  assert(find_media("DC103_164")->length_mm == 164);
   assert(find_media("102mm")->continuous == 1);
+  assert(find_media("103mm")->width_mm == 104);
   assert(find_media("C_DC03_01")->width_mm == 29);
   assert(find_media("DC16")->length_mm == 153);
   assert(find_media("no-existe") == NULL);
@@ -38,12 +41,14 @@ int main(void) {
   assert(!device_uri_is_usb("socket://192.0.2.10:9100"));
   assert(!device_uri_is_usb(NULL));
   uint8_t command[3];
-  make_raster_command(8, command);
+  assert(make_raster_command(8, command) == 0);
   assert(command[0] == 0x67 && command[1] == 0x00 && command[2] == 0x08);
-  make_raster_command(162, command);
+  assert(make_raster_command(162, command) == 0);
   assert(command[0] == 0x67 && command[1] == 0x00 && command[2] == 0xa2);
-  make_raster_command(0x1234, command);
-  assert(command[0] == 0x67 && command[1] == 0x12 && command[2] == 0x34);
+  assert(make_raster_command(255, command) == 0);
+  assert(command[1] == 0x00 && command[2] == 0xff);
+  assert(make_raster_command(256, command) == -1);
+  assert(make_raster_command(0x1234, command) == -1);
 
   const uint8_t status_bytes[32] = {
       0x80, 0x20, 0x42, 0x34, 0x34, 0x30, 0x00, 0x00,
@@ -54,6 +59,9 @@ int main(void) {
   assert(parse_status_block(status_bytes, sizeof(status_bytes), &status) == 0);
   assert(status.valid && status.type == 0x0a && status.width_mm == 0);
   assert(status.error2 == 0x01 && status.status_type == 0x02);
+  char error_summary[256];
+  assert(status_error_summary(&status, error_summary, sizeof(error_summary)));
+  assert(strstr(error_summary, "material incorrecto"));
   media_t resolved;
   const media_t *auto_media =
       resolve_media(find_media("DC16"), &status, 1, &resolved);
@@ -70,10 +78,18 @@ int main(void) {
   const media_t tiny = {"tiny", 1, 0, 0, 8, 1};
   const uint8_t left_pixel[] = {0x80};
   uint8_t head[HEAD_BYTES];
-  make_head_row(left_pixel, &header, &tiny, 0, 0, 0, head);
+  make_head_row(left_pixel, &header, &tiny, 0, 0, 0, 0, 0, head);
   assert(head[0] == 0x01);
-  make_head_row(left_pixel, &header, &tiny, 1, 0, 0, head);
+  make_head_row(left_pixel, &header, &tiny, 0, 1, 0, 0, 0, head);
   assert(head[0] == 0x80);
+  assert(!halftone_is_black(64, 0, 0, 0));
+  assert(halftone_is_black(64, 0, 0, 1));
+  assert(!halftone_is_black(64, 1, 0, 1));
+  assert(valid_page_length(find_media("W102"), CONTINUOUS_MIN_ROWS));
+  assert(valid_page_length(find_media("W103"), CONTINUOUS_MAX_ROWS));
+  assert(!valid_page_length(find_media("W102"), CONTINUOUS_MIN_ROWS - 1));
+  assert(!valid_page_length(find_media("W103"), CONTINUOUS_MAX_ROWS + 1));
+  assert(valid_page_length(find_media("DC16"), 1));
 
   FILE *control = tmpfile();
   assert(control);
@@ -109,6 +125,21 @@ int main(void) {
   assert(!strcmp(auto_diecut->name, "AUTO-DC16"));
   assert(should_validate_width(find_media("W102"), auto_diecut,
                                &diecut_status, 1));
+
+  printer_status_t wide_status = status;
+  wide_status.error2 = 0;
+  wide_status.width_mm = 104;
+  wide_status.type = 0x0a;
+  media_t resolved_wide;
+  const media_t *auto_wide =
+      resolve_media(find_media("DC103_164"), &wide_status, 1, &resolved_wide);
+  assert(auto_wide->continuous && !strcmp(auto_wide->name, "AUTO-W103"));
+  wide_status.type = 0x0b;
+  wide_status.length_mm = 164;
+  auto_wide = resolve_media(find_media("W103"), &wide_status, 1,
+                            &resolved_wide);
+  assert(!auto_wide->continuous && auto_wide->length_mm == 164);
+  assert(!strcmp(auto_wide->name, "AUTO-DC103_164"));
   puts("OK");
   return 0;
 }

@@ -17,7 +17,7 @@ La forma recomendada es abrir el instalador generado:
 
 ```sh
 make installer
-open build/QL-1050-QL-1060N-macOS27-arm64-0.6.0.pkg
+open build/QL-1050-QL-1060N-macOS27-arm64-0.7.0.pkg
 ```
 
 Después, añade la impresora desde Ajustes del Sistema o crea la cola desde
@@ -44,13 +44,18 @@ Sin argumentos se instalan el filtro y el PPD, pero no se crea una cola.
 ## Alcance
 
 - Resolución: 300 × 300 dpi, negro térmico.
-- Rollos continuos: 12, 29, 38, 50, 54, 62 y 102 mm.
-- Etiquetas precortadas Brother incluidas en la referencia oficial.
-- Corte automático, espejo y prioridad de calidad.
+- Rollos continuos: 12, 29, 38, 50, 54, 62, 102 y 103 mm.
+- Etiquetas precortadas Brother incluidas en la referencia oficial, incluida
+  la DK-11247 de 103 × 164 mm.
+- Corte automático, espejo, prioridad de calidad y tramado ordenado opcional
+  para fotografías y gráficos. El umbral nítido para texto y códigos sigue
+  siendo el valor predeterminado.
 - Detección automática por SNMP (QL-1060N en red) entre DC16 102 × 152 mm
-  precortado y rollo continuo de 102 mm, manteniendo una página de
-  102 × 152 mm.
+  precortado y rollo continuo de 102 mm, y entre 103 × 164 mm y continuo de
+  103 mm.
 - El filtro usa compresión TIFF PackBits, requerida por Brother para LAN.
+- En material continuo valida el intervalo documentado por Brother: de 295 a
+  35 433 filas (aproximadamente de 25 mm a 3 m a 300 dpi).
 
 Este proyecto es una implementación independiente basada en la especificación
 pública de comandos Brother; no contiene binarios ni código de Brother.
@@ -62,4 +67,18 @@ iconos propietarios del controlador antiguo de Brother.
 
 La versión de diagnóstico guarda metadatos del protocolo y las respuestas de
 estado de la impresora en `/Library/Logs/QL1060N/driver.log`. No guarda el
-contenido rasterizado de las etiquetas.
+contenido rasterizado de las etiquetas. Los bits de error se traducen a texto
+legible, por ejemplo «material incorrecto», «tapa abierta» o «atasco del
+cortador».
+
+## Agradecimientos y atribución
+
+La verificación del catálogo de rollos, los márgenes del cabezal y los límites
+de longitud se benefició de la referencia pública
+[`pklaus/brother_ql`](https://github.com/pklaus/brother_ql), creada por Philipp
+Klaus y sus colaboradores y publicada bajo GPL-3.0. Gracias por documentar y
+mantener la compatibilidad de la familia Brother QL.
+
+Este controlador implementa de forma independiente la especificación pública
+de comandos ráster de Brother. No incorpora ni redistribuye código fuente de
+`brother_ql`.
